@@ -24,7 +24,21 @@ func NewExec(ctx context.Context, containers ContainerManager, logger *slog.Logg
 	return &Exec{ctx: ctx, containers: containers, logger: logger}
 }
 
-func (e *Exec) ContainerCmd(nodeID, containerName string, argv ...string) (*containers.ExecResult, error) {
+type ExecResult struct {
+	ExitCode uint32
+	Stdout   string
+	Stderr   string
+}
+
+func convertContainersExecResult(r containers.ExecResult) *ExecResult {
+	return &ExecResult{
+		ExitCode: r.ExitCode,
+		Stdout:   r.Stdout,
+		Stderr:   r.Stderr,
+	}
+}
+
+func (e *Exec) ContainerCmd(nodeID, containerName string, argv ...string) (*ExecResult, error) {
 	e.logger.Debug("exec requested", "node", nodeID, "service", containerName, "argv", argv)
 	container := e.containers.FindContainer(spec.NodeID(nodeID), containerName)
 	if container == nil {
@@ -36,5 +50,5 @@ func (e *Exec) ContainerCmd(nodeID, containerName string, argv ...string) (*cont
 		return nil, err
 	}
 	e.logger.Debug("exec finished", "node", nodeID, "service", containerName, "container_id", container.ID, "exit_code", res.ExitCode, "stdout_len", len(res.Stdout), "stderr_len", len(res.Stderr))
-	return res, nil
+	return convertContainersExecResult(*res), nil
 }
