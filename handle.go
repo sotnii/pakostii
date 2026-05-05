@@ -39,9 +39,6 @@ func newTestHandle(
 }
 
 func (t *TestHandle) Cleanup() error {
-	if t == nil || t.network == nil {
-		return nil
-	}
 	return t.network.Cleanup()
 }
 

@@ -10,6 +10,7 @@ require (
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/lmittmann/tint v1.1.3
 	github.com/opencontainers/runtime-spec v1.2.0
+	github.com/redis/go-redis/v9 v9.19.0
 	github.com/vishvananda/netns v0.0.5
 	go.etcd.io/etcd/client/v3 v3.6.11
 )
@@ -51,7 +52,6 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/selinux v1.13.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/redis/go-redis/v9 v9.19.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.11 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.11 // indirect

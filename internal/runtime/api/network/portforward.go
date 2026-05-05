@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"strconv"
@@ -11,7 +12,9 @@ import (
 )
 
 type PortForward struct {
-	exec agent.ClusterNetworkExecAgent
+	mu      sync.Mutex
+	exec    agent.ClusterNetworkExecAgent
+	handles []*PortForwardHandle
 }
 
 type PortForwardHandle struct {
@@ -28,11 +31,29 @@ func NewPortForward(exec agent.ClusterNetworkExecAgent) *PortForward {
 }
 
 func (p *PortForward) ForwardTCP(targetIP net.IP, targetPort int) *PortForwardHandle {
-	return &PortForwardHandle{
+	handle := &PortForwardHandle{
 		targetIP:   targetIP,
 		targetPort: targetPort,
 		exec:       p.exec,
 	}
+	p.mu.Lock()
+	p.handles = append(p.handles, handle)
+	p.mu.Unlock()
+	return handle
+}
+
+func (p *PortForward) Cleanup() error {
+	var errs []error
+	p.mu.Lock()
+	for _, handle := range p.handles {
+		if err := handle.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	p.handles = nil
+	p.mu.Unlock()
+
+	return errors.Join(errs...)
 }
 
 func (h *PortForwardHandle) Port() int {

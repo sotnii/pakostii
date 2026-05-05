@@ -60,8 +60,12 @@ func (n *Network) Partition() *Partition {
 }
 
 func (n *Network) Cleanup() error {
-	if n == nil {
-		return nil
+	var errs []error
+	if err := n.portFw.Cleanup(); err != nil {
+		errs = append(errs, err)
 	}
-	return n.partition.Cleanup()
+	if err := n.partition.Cleanup(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
