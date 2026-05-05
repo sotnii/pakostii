@@ -6,28 +6,6 @@ import (
 	"time"
 )
 
-type PatroniConfig struct {
-	Name        string
-	NodeAddress NodeID
-	EtcdHosts   []NodeID
-}
-
-func Patroni(name, image string, cfg PatroniConfig, configTemplate string) ContainerSpec {
-	hosts := make([]string, 0, len(cfg.EtcdHosts))
-	for _, host := range cfg.EtcdHosts {
-		hosts = append(hosts, fmt.Sprintf("%s:2379", host))
-	}
-
-	return NewContainer(name, image).WithFile(
-		"/etc/patroni/patroni.yml",
-		strings.NewReplacer(
-			"$CLUSTER_NAME", cfg.Name,
-			"$NODE_ADDRESS", string(cfg.NodeAddress),
-			"$ETCD3_HOSTS", fmt.Sprintf("[%s]", strings.Join(hosts, ",")),
-		).Replace(configTemplate),
-	)
-}
-
 type EtcdConfig struct {
 	Name         string
 	RunsOnHost   string
