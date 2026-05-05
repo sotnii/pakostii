@@ -14,6 +14,7 @@ type numberWriters struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	key    string
+	rate   time.Duration
 
 	clients []*redis.Client
 
@@ -24,19 +25,20 @@ type numberWriters struct {
 	acknowledged map[string]struct{}
 }
 
-func newNumberWriters(ctx context.Context, key string, clients ...*redis.Client) *numberWriters {
+func newNumberWriters(ctx context.Context, key string, rate time.Duration, clients ...*redis.Client) *numberWriters {
 	writerCtx, cancel := context.WithCancel(ctx)
 	return &numberWriters{
 		ctx:          writerCtx,
 		cancel:       cancel,
 		key:          key,
+		rate:         rate,
 		clients:      clients,
 		acknowledged: make(map[string]struct{}),
 	}
 }
 
 func (w *numberWriters) Start() {
-	ticker := time.NewTicker(20 * time.Millisecond)
+	ticker := time.NewTicker(w.rate)
 
 	for _, client := range w.clients {
 		w.wg.Add(1)

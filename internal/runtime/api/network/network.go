@@ -46,6 +46,14 @@ func (n *Network) IpOf(node string) net.IP {
 	return n.partition.networkResolver.GetNamespace(spec.NodeID(node)).AllocatedIP
 }
 
+func (n *Network) IpsOf(nodes []string) map[string]net.IP {
+	ips := make(map[string]net.IP, len(nodes))
+	for _, node := range nodes {
+		ips[node] = n.IpOf(node)
+	}
+	return ips
+}
+
 func (n *Network) ForwardPort(node string, port int) (*PortForwardHandle, error) {
 	ip := n.IpOf(node)
 	if ip == nil {

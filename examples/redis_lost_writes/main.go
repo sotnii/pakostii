@@ -62,10 +62,7 @@ func main() {
 			return err
 		}
 
-		nodeIPs, err := redisNodeIPs(t)
-		if err != nil {
-			return err
-		}
+		nodeIPs := t.Network().IpsOf(redisHosts)
 		t.Logger.Info("resolved redis node IPs", "nodes", len(nodeIPs))
 
 		t.Logger.Info("setting up writer clients")
@@ -75,7 +72,7 @@ func main() {
 		client2 := newFailoverClient(sentinelAddrs(forwardedAddrs, redisHosts[2:]), dialer)
 		defer client2.Close()
 
-		writers := newNumberWriters(t.Ctx, setKey, client1, client2)
+		writers := newNumberWriters(t.Ctx, setKey, time.Millisecond*5, client1, client2)
 		writers.Start()
 
 		t.Logger.Info("warming up writes before partition")
@@ -152,19 +149,7 @@ func sentinelAddrs(forwardedAddrs map[string]string, nodes []string) []string {
 	return addrs
 }
 
-func redisNodeIPs(t *pakostii.TestHandle) (map[string]string, error) {
-	ips := make(map[string]string, len(redisHosts))
-	for _, node := range redisHosts {
-		ip := t.Network().IpOf(node)
-		if ip == nil {
-			return nil, fmt.Errorf("could not resolve IP for %s", node)
-		}
-		ips[node] = ip.String()
-	}
-	return ips, nil
-}
-
-func forwardedDialer(forwardedAddrs map[string]string, nodeIPs map[string]string) func(context.Context, string, string) (net.Conn, error) {
+func forwardedDialer(forwardedAddrs map[string]string, nodeIPs map[string]net.IP) func(context.Context, string, string) (net.Conn, error) {
 	addrMap := make(map[string]string, len(forwardedAddrs)*2)
 	for target, local := range forwardedAddrs {
 		addrMap[target] = local
@@ -173,8 +158,8 @@ func forwardedDialer(forwardedAddrs map[string]string, nodeIPs map[string]string
 		if err != nil {
 			continue
 		}
-		if ip := nodeIPs[host]; ip != "" {
-			addrMap[net.JoinHostPort(ip, port)] = local
+		if ip := nodeIPs[host]; ip != nil {
+			addrMap[net.JoinHostPort(ip.String(), port)] = local
 		}
 	}
 
@@ -199,14 +184,16 @@ func newFailoverClient(sentinelAddrs []string, dialer func(context.Context, stri
 	})
 }
 
-func waitForAZ2Master(ctx context.Context, forwardedAddrs map[string]string, nodeIPs map[string]string, logger *slog.Logger) (string, error) {
+func waitForAZ2Master(ctx context.Context, forwardedAddrs map[string]string, nodeIPs map[string]net.IP, logger *slog.Logger) (string, error) {
 	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	sentinels := sentinelAddrs(forwardedAddrs, redisHosts[2:])
 	hostByIP := make(map[string]string, len(nodeIPs))
 	for host, ip := range nodeIPs {
-		hostByIP[ip] = host
+		if ip != nil {
+			hostByIP[ip.String()] = host
+		}
 	}
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
