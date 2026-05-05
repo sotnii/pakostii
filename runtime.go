@@ -20,6 +20,7 @@ import (
 	"github.com/sotnii/pakostii/internal/runtime/managers"
 	"github.com/sotnii/pakostii/internal/runtime/util"
 	"github.com/sotnii/pakostii/spec"
+	"github.com/vishvananda/netns"
 )
 
 type TestResult struct {
@@ -150,19 +151,17 @@ func (r *TestRuntime) Run(ctx context.Context, fn func(*TestHandle) error) (resu
 	if agentNs == nil {
 		return TestResult{ErrorMessage: "agent namespace not initialized, could not proceed the test"}
 	}
-	httpAgent, err := agent.NewClusterHttpAgent(agentNs.Path, r.network.NodeIPs())
+	netnsHandle, err := netns.GetFromPath(agentNs.Path)
+	if err != nil {
+		return resultFromError(err, sigState)
+	}
+	netnsExecAgent := agent.NewNetNsExecAgent(netnsHandle)
+	httpAgent, err := agent.NewNetNsHttpAgent(netnsExecAgent, r.network.NodeIPs())
 	if err != nil {
 		return resultFromError(err, sigState)
 	}
 
-	handle = newTestHandle(
-		ctx,
-		r.spec,
-		&r.containers,
-		&r.network,
-		httpAgent,
-		r.logger,
-	)
+	handle = newTestHandle(ctx, r.spec, &r.containers, &r.network, httpAgent, netnsExecAgent, r.logger)
 
 	return r.runTest(ctx, cancel, sigState, handle, fn)
 }

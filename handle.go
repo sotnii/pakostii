@@ -6,6 +6,7 @@ import (
 
 	"github.com/sotnii/pakostii/internal/runtime/agent"
 	"github.com/sotnii/pakostii/internal/runtime/api"
+	"github.com/sotnii/pakostii/internal/runtime/api/network"
 	"github.com/sotnii/pakostii/internal/runtime/managers"
 	"github.com/sotnii/pakostii/spec"
 )
@@ -15,16 +16,25 @@ type TestHandle struct {
 	Logger  *slog.Logger
 	exec    *api.Exec
 	http    *api.Http
-	network *api.Network
+	network *network.Network
 }
 
-func newTestHandle(ctx context.Context, spec spec.ClusterSpec, containers *managers.ContainerManager, network *managers.NetworkManager, httpAgent agent.HttpAgent, logger *slog.Logger) *TestHandle {
+func newTestHandle(
+	ctx context.Context,
+	spec spec.ClusterSpec,
+	containers *managers.ContainerManager,
+	netManager *managers.NetworkManager,
+	// TODO: Httpanget can be built from execAgent, so passing both is redundant.
+	httpAgent agent.HttpAgent,
+	execAgent agent.ClusterNetworkExecAgent,
+	logger *slog.Logger,
+) *TestHandle {
 	return &TestHandle{
 		Ctx:     ctx,
 		Logger:  logger,
 		exec:    api.NewExec(ctx, containers, logger.With("component", "exec_api")),
 		http:    api.NewHttp(httpAgent),
-		network: api.NewNetwork(spec, network, logger.With("component", "network_api")),
+		network: network.NewNetwork(spec, netManager, execAgent, logger.With("component", "network_api")),
 	}
 }
 
@@ -43,6 +53,6 @@ func (t *TestHandle) Http() *api.Http {
 	return t.http
 }
 
-func (t *TestHandle) Network() *api.Network {
+func (t *TestHandle) Network() *network.Network {
 	return t.network
 }

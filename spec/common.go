@@ -30,8 +30,8 @@ func Patroni(name, image string, cfg PatroniConfig, configTemplate string) Conta
 
 type EtcdConfig struct {
 	Name         string
-	RunsOnHost   NodeID
-	ClusterHosts []NodeID
+	RunsOnHost   string
+	ClusterHosts []string
 }
 
 func Etcd(name, image string, cfg EtcdConfig) ContainerSpec {

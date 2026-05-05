@@ -30,6 +30,13 @@ const (
 	networkManagerStatusClosed
 )
 
+func (m *NetworkManager) GetAgentNamespace() network.Namespace {
+	if m.agentNamespace != nil {
+		return *m.agentNamespace
+	}
+	panic("agent namespace is not initialized")
+}
+
 func (m *NetworkManager) HasNamespace(id spec.NodeID) bool {
 	_, ok := m.namespaces[id]
 	return ok

@@ -2,6 +2,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 bpfAssetsDir := "./internal/runtime/bpf/assets"
 
+lint:
+    golangci-lint run
+
 # Needs bpf-linker
 bpf:
     cargo +nightly build \

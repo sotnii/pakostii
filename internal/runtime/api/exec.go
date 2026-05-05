@@ -30,15 +30,8 @@ type ExecResult struct {
 	Stderr   string
 }
 
-func convertContainersExecResult(r containers.ExecResult) *ExecResult {
-	return &ExecResult{
-		ExitCode: r.ExitCode,
-		Stdout:   r.Stdout,
-		Stderr:   r.Stderr,
-	}
-}
-
-func (e *Exec) ContainerCmd(nodeID, containerName string, argv ...string) (*ExecResult, error) {
+// InContainer executes a command in a container on a specific node
+func (e *Exec) InContainer(nodeID, containerName string, argv ...string) (*ExecResult, error) {
 	e.logger.Debug("exec requested", "node", nodeID, "service", containerName, "argv", argv)
 	container := e.containers.FindContainer(spec.NodeID(nodeID), containerName)
 	if container == nil {
@@ -51,4 +44,12 @@ func (e *Exec) ContainerCmd(nodeID, containerName string, argv ...string) (*Exec
 	}
 	e.logger.Debug("exec finished", "node", nodeID, "service", containerName, "container_id", container.ID, "exit_code", res.ExitCode, "stdout_len", len(res.Stdout), "stderr_len", len(res.Stderr))
 	return convertContainersExecResult(*res), nil
+}
+
+func convertContainersExecResult(r containers.ExecResult) *ExecResult {
+	return &ExecResult{
+		ExitCode: r.ExitCode,
+		Stdout:   r.Stdout,
+		Stderr:   r.Stderr,
+	}
 }

@@ -9,39 +9,33 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sotnii/pakostii/internal/runtime/util"
 	"github.com/sotnii/pakostii/spec"
-	"github.com/vishvananda/netns"
 )
 
 type HttpResult struct {
 	StatusCode int
 	Body       []byte
 }
+
 type HttpAgent interface {
 	Do(req *http.Request, timeout time.Duration) (*HttpResult, error)
 }
 
-type ClusterHttpAgent struct {
-	agentNS netns.NsHandle
-	hosts   map[string]string
+type NetNsHttpAgent struct {
+	execAgent ClusterNetworkExecAgent
+	hosts     map[string]string
 }
 
-func NewClusterHttpAgent(agentNsPath string, nodeIPs map[spec.NodeID]net.IP) (*ClusterHttpAgent, error) {
-	agent, err := netns.GetFromPath(agentNsPath)
-	if err != nil {
-		return nil, err
-	}
-
+func NewNetNsHttpAgent(execAgent ClusterNetworkExecAgent, nodeIPs map[spec.NodeID]net.IP) (*NetNsHttpAgent, error) {
 	hosts := make(map[string]string)
 	for id, ip := range nodeIPs {
 		hosts[string(id)] = ip.String()
 	}
 
-	return &ClusterHttpAgent{agentNS: agent, hosts: hosts}, nil
+	return &NetNsHttpAgent{execAgent: execAgent, hosts: hosts}, nil
 }
 
-func (agent *ClusterHttpAgent) Do(req *http.Request, timeout time.Duration) (*HttpResult, error) {
+func (agent *NetNsHttpAgent) Do(req *http.Request, timeout time.Duration) (*HttpResult, error) {
 	if req == nil {
 		return nil, fmt.Errorf("request is nil")
 	}
@@ -56,7 +50,7 @@ func (agent *ClusterHttpAgent) Do(req *http.Request, timeout time.Duration) (*Ht
 	}
 
 	var res *HttpResult
-	err := util.WithNetNSHandle(agent.agentNS, func() error {
+	err := agent.execAgent.Exec(func() error {
 		agentRes, err := agent.do(req, timeout)
 		if err != nil {
 			return err
@@ -71,7 +65,7 @@ func (agent *ClusterHttpAgent) Do(req *http.Request, timeout time.Duration) (*Ht
 	return res, nil
 }
 
-func (agent *ClusterHttpAgent) do(req *http.Request, timeout time.Duration) (*HttpResult, error) {
+func (agent *NetNsHttpAgent) do(req *http.Request, timeout time.Duration) (*HttpResult, error) {
 	dialAddr, err := agent.resolveDialAddress(req.URL.Host)
 	if err != nil {
 		return nil, err
@@ -131,7 +125,7 @@ func (agent *ClusterHttpAgent) do(req *http.Request, timeout time.Duration) (*Ht
 	}, nil
 }
 
-func (agent *ClusterHttpAgent) resolveDialAddress(hostport string) (string, error) {
+func (agent *NetNsHttpAgent) resolveDialAddress(hostport string) (string, error) {
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
 		return "", err

@@ -1,4 +1,4 @@
-package api
+package network
 
 import (
 	"errors"
@@ -13,14 +13,6 @@ import (
 	"github.com/sotnii/pakostii/spec"
 )
 
-type NodeNetworkResolver interface {
-	GetNamespace(id spec.NodeID) network.Namespace
-}
-
-type Network struct {
-	partition *Partition
-}
-
 type Partition struct {
 	mu              sync.Mutex
 	logger          *slog.Logger
@@ -30,49 +22,30 @@ type Partition struct {
 }
 
 type AZIsolationHandle struct {
-	mu                      sync.Mutex
-	name                    string
-	logger                  *slog.Logger
-	allowedSources          []net.IP
+	mu             sync.Mutex
+	name           string
+	logger         *slog.Logger
+	agentNamespace network.Namespace
+	allowedSources []net.IP
+	// TODO: This is untestable, should be an interface that is provided to the handle
 	trafficDrop             *bpf.TrafficDrop
 	handles                 []*bpf.TrafficDropHandle
 	affectedNamespacesNames []network.Namespace
 }
 
-func NewNetwork(spec spec.ClusterSpec, networkResolver NodeNetworkResolver, logger *slog.Logger) *Network {
-	return &Network{
-		partition: &Partition{
-			logger:          logger,
-			spec:            spec,
-			networkResolver: networkResolver,
-			handles:         make([]*AZIsolationHandle, 0),
-		},
-	}
-}
-
-func (n *Network) Partition() *Partition {
-	return n.partition
-}
-
-func (n *Network) Cleanup() error {
-	if n == nil || n.partition == nil {
-		return nil
-	}
-	return n.partition.Cleanup()
-}
-
-func (p *Partition) IsolateAZ(name, az string) (*AZIsolationHandle, error) {
+// TODO: Allow agent namespace to access isolated nodes (probably with a flag)
+func (p *Partition) IsolateAZ(name, az string) *AZIsolationHandle {
 	nodes := nodesWithAz(spec.AZID(az), &p.spec)
 	namespaces := make([]network.Namespace, len(nodes))
 	for i, node := range nodes {
 		namespaces[i] = p.networkResolver.GetNamespace(node)
 	}
-
 	allowedSources := namespaceIPs(namespaces)
 
 	p.logger.Debug("created isolation handle", "az_isolation", name, "az", az, "ips", allowedSources)
 
 	handle := &AZIsolationHandle{
+		agentNamespace:          p.networkResolver.GetAgentNamespace(),
 		logger:                  p.logger.With("az_isolation", name),
 		name:                    name,
 		allowedSources:          allowedSources,
@@ -84,7 +57,7 @@ func (p *Partition) IsolateAZ(name, az string) (*AZIsolationHandle, error) {
 	p.handles = append(p.handles, handle)
 	p.mu.Unlock()
 
-	return handle, nil
+	return handle
 }
 
 func (p *Partition) Cleanup() error {
@@ -103,6 +76,14 @@ func (p *Partition) Cleanup() error {
 	return errors.Join(errs...)
 }
 
+func (p *AZIsolationHandle) WithNetworkAccess() *AZIsolationHandle {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.allowedSources = append(p.allowedSources, p.agentNamespace.AllocatedIP)
+	return p
+}
+
 func (a *AZIsolationHandle) Apply() error {
 	a.mu.Lock()
 
@@ -112,6 +93,7 @@ func (a *AZIsolationHandle) Apply() error {
 	}
 
 	if a.trafficDrop == nil {
+		// TODO: Not testable calling bpf.NewTrafficDrop directly
 		td, err := bpf.NewTrafficDrop(a.allowedSources)
 		if err != nil {
 			a.mu.Unlock()
@@ -132,24 +114,10 @@ func (a *AZIsolationHandle) Apply() error {
 
 	a.logger.Debug("applying isolation", "namespaces", a.affectedNamespacesNames)
 	for _, ns := range a.affectedNamespacesNames {
-		var tdHandle *bpf.TrafficDropHandle
-		err := util.WithNetNSPath(ns.Path, func() error {
-			iface, err := net.InterfaceByName(ns.Interface)
-			a.logger.Debug("resolved interface", "namespace", ns.Path, "interface", ns.Interface)
-			if err != nil {
-				return fmt.Errorf("failed to find network interface %s in network namespace %s: %w", ns.Interface, ns.Name, err)
-			}
-			tdHandle, err = a.trafficDrop.Attach(iface, ns.Name)
-			if err != nil {
-				return fmt.Errorf("failed to attach traffic drop to network namespace %s: %w", ns.Name, err)
-			}
-			return nil
-		})
-		if err != nil {
+		if err := a.attachTrafficDrop(ns); err != nil {
 			errs = append(errs, err)
 			break
 		}
-		a.handles = append(a.handles, tdHandle)
 	}
 
 	a.mu.Unlock()
@@ -162,6 +130,40 @@ func (a *AZIsolationHandle) Apply() error {
 
 		return errors.Join(errs...)
 	}
+
+	return nil
+}
+
+func (a *AZIsolationHandle) attachTrafficDrop(ns network.Namespace) error {
+	var namespaceHandle *bpf.TrafficDropHandle
+	err := util.WithNetNSPath(ns.Path, func() error {
+		iface, err := net.InterfaceByName(ns.Interface)
+		a.logger.Debug("resolved interface", "namespace", ns.Path, "interface", ns.Interface)
+		if err != nil {
+			return fmt.Errorf("failed to find network interface %s in network namespace %s: %w", ns.Interface, ns.Name, err)
+		}
+		namespaceHandle, err = a.trafficDrop.Attach(iface, ns.Name)
+		if err != nil {
+			return fmt.Errorf("failed to attach traffic drop to network namespace %s: %w", ns.Name, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	a.handles = append(a.handles, namespaceHandle)
+
+	bridgePeer, err := net.InterfaceByName(ns.BridgePeer)
+	a.logger.Debug("resolved bridge peer interface", "namespace", ns.Name, "bridge_peer", ns.BridgePeer)
+	if err != nil {
+		return fmt.Errorf("failed to find bridge peer interface %s for network namespace %s: %w", ns.BridgePeer, ns.Name, err)
+	}
+
+	bridgePeerHandle, err := a.trafficDrop.Attach(bridgePeer, "host:"+ns.BridgePeer)
+	if err != nil {
+		return fmt.Errorf("failed to attach traffic drop to bridge peer interface %s for network namespace %s: %w", ns.BridgePeer, ns.Name, err)
+	}
+	a.handles = append(a.handles, bridgePeerHandle)
 
 	return nil
 }
