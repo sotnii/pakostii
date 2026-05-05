@@ -94,6 +94,8 @@ func (p *ContainerManager) Prepare(ctx context.Context, clusterSpec spec.Cluster
 		p.mu.Unlock()
 	}()
 
+	p.logger.Info("preparing containers")
+
 	hostsFile, err := p.buildHostsFile(nodeNet.NodeIPs())
 	if err != nil {
 		return err

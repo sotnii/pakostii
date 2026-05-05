@@ -34,21 +34,20 @@ func NewTest(name string, cluster *ClusterSpec, opts ...TestOption) *Test {
 }
 
 func (t *Test) Run(ctx context.Context, fn func(*TestHandle) error) {
-	logger := t.logger.With("test", t.name)
-	rt, err := t.runtime(t.name, t.clusterSpec, logger)
+	rt, err := t.runtime(t.name, t.clusterSpec, t.logger)
 	if err != nil {
-		logger.Error("error creating runtime", "error", err)
+		t.logger.Error("error creating runtime", "error", err)
 		panic(err)
 	}
 	result := rt.Run(ctx, fn)
 	if result.Failed() {
-		logger.Error("test failed", "error", result.ErrorMessage)
+		t.logger.Error("test failed", "error", result.ErrorMessage)
 		if result.StackTrace != "" {
 			fmt.Fprintln(os.Stderr, prettyStackTrace(result.StackTrace))
 		}
 		os.Exit(1)
 	}
-	logger.Info("test passed")
+	t.logger.Info("test passed")
 }
 
 func prettyStackTrace(stackTrace string) string {

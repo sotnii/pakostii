@@ -54,7 +54,7 @@ func (m *NamespaceManager) SetupBridge(ctx context.Context) error {
 		return fmt.Errorf("check bridge status: %w", err)
 	}
 	if !exists {
-		m.logger.Info("creating bridge", "bridge", m.bridgeName)
+		m.logger.Debug("creating bridge", "bridge", m.bridgeName)
 		if err := m.ip.AddBridge(ctx, m.bridgeName); err != nil {
 			return fmt.Errorf("create bridge %s: %w", m.bridgeName, err)
 		}
@@ -124,7 +124,7 @@ func (m *NamespaceManager) SetupNamespace(ctx context.Context, ns *Namespace) er
 	ns.Interface = veth
 	ns.BridgePeer = bridgePeer
 	ns.AllocatedIP = ip
-	m.logger.Info("namespace ready", "namespace", ns.Name, "ip", ip.String(), "veth", veth, "bridge_peer", bridgePeer)
+	m.logger.Debug("namespace ready", "namespace", ns.Name, "ip", ip.String(), "veth", veth, "bridge_peer", bridgePeer)
 	return nil
 }
 

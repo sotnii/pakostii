@@ -221,7 +221,7 @@ func waitForAZ2Master(ctx context.Context, forwardedAddrs map[string]string, nod
 
 			masterHost := normalizeRedisHost(master, hostByIP)
 
-			if masterHost == "redis3" || master == "redis4" || master == "redis5" {
+			if masterHost == "redis3" || masterHost == "redis4" || masterHost == "redis5" {
 				return masterHost, nil
 			}
 			logger.Debug("az2 sentinel has not elected an az2 master", "sentinel", addr, "master", master)

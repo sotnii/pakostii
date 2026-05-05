@@ -51,17 +51,12 @@ func NewRuntimeManager(cfg Config) (ContainerRuntimeManager, error) {
 		return nil, fmt.Errorf("connect to containerd: %w", err)
 	}
 
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-
 	return &manager{
 		client:      client,
 		namespace:   cfg.Namespace,
 		snapshotter: cfg.Snapshotter,
 		workDir:     cfg.WorkDir,
-		logger:      logger,
+		logger:      cfg.Logger,
 	}, nil
 }
 
@@ -165,7 +160,7 @@ func (m *manager) RunContainer(ctx context.Context, req LaunchRequest) (*Running
 
 	m.logger.Debug("cleanup stack cleared after successful container start", "container_id", req.ID)
 	cleanup.Clear()
-	m.logger.Info("container started", "container_id", req.ID, "image", req.ImageRef)
+	m.logger.Debug("container started", "container_id", req.ID, "image", req.ImageRef)
 	return &RunningContainer{
 		ID:          req.ID,
 		Name:        req.Name,

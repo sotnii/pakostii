@@ -68,6 +68,13 @@ func NewTestRuntime(name string, cluster spec.ClusterSpec, logger *slog.Logger) 
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
 
+	testId := util.NewResourceID()
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	logger = logger.With("test_id", testId)
+
 	nsMgr, err := network.NewManager("pkst", network.ExecCommander{}, logger.With("component", "network"))
 	if err != nil {
 		return nil, err
@@ -78,13 +85,12 @@ func NewTestRuntime(name string, cluster spec.ClusterSpec, logger *slog.Logger) 
 		Namespace:   containers.DefaultNamespace,
 		Snapshotter: containers.DefaultSnapshotter,
 		WorkDir:     workDir,
-		Logger:      logger.With("component", "containerd"),
+		Logger:      logger.With("component", "container_runtime"),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	testId := util.NewResourceID()
 	return &TestRuntime{
 		id:           testId,
 		name:         name,
@@ -115,7 +121,15 @@ func (r *TestRuntime) Run(ctx context.Context, fn func(*TestHandle) error) (resu
 		}
 	}()
 
-	r.logger.Info("test runtime starting", "nodes", len(r.spec.Nodes), "artifacts_dir", r.artifactsDir, "work_dir", r.workDir)
+	r.logger.Info(
+		fmt.Sprintf("runtime for test %q starting", r.name),
+		"nodes",
+		len(r.spec.Nodes),
+		"artifacts_dir",
+		r.artifactsDir,
+		"work_dir",
+		r.workDir,
+	)
 	defer cancel()
 	defer func() {
 		if v := recover(); v != nil {
@@ -167,13 +181,14 @@ func (r *TestRuntime) Run(ctx context.Context, fn func(*TestHandle) error) (resu
 }
 
 func (r *TestRuntime) prepare(ctx context.Context) error {
-	r.logger.Info("preparing runtime", "test_id", r.id)
+	r.logger.Info("preparing runtime")
 	if err := r.network.Prepare(ctx, r.spec); err != nil {
 		return err
 	}
 	if err := r.containers.Prepare(ctx, r.spec, r.id, &r.network); err != nil {
 		return err
 	}
+	r.logger.Info("runtime ready")
 	return nil
 }
 
@@ -194,7 +209,7 @@ func (r *TestRuntime) runTest(ctx context.Context, cancel context.CancelFunc, si
 			}
 		}()
 
-		r.logger.Info("starting test")
+		r.logger.Info(fmt.Sprintf("starting test %q", r.name))
 		if err := fn(handle); err != nil {
 			testResult <- TestResult{ErrorMessage: err.Error()}
 			return

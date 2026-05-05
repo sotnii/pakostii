@@ -103,6 +103,7 @@ func (m *NetworkManager) Prepare(ctx context.Context, spec spec.ClusterSpec) err
 		if err := m.nsMgr.SetupNamespace(ctx, ns); err != nil {
 			return err
 		}
+		m.logger.Info(fmt.Sprintf("network ready for node %s", nodeSpec.ID), "namespace", ns.Name, "ip", ns.AllocatedIP)
 	}
 
 	m.status = networkManagerStatusPrepared
