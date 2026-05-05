@@ -275,7 +275,6 @@ func (r *TestRuntime) cleanupHandle(handle *TestHandle) (err error) {
 }
 
 func (r *TestRuntime) teardown(ctx context.Context) error {
-	r.logger.Info("tearing down runtime")
 	var errs []error
 
 	for _, node := range r.spec.Nodes {
@@ -286,16 +285,20 @@ func (r *TestRuntime) teardown(ctx context.Context) error {
 			}
 		}
 	}
+	r.logger.Info("artifacts collected", "destination", r.artifactsDir)
 
+	r.logger.Info("tearing down runtime")
 	err := r.containers.Teardown(ctx)
 	if err != nil {
 		errs = append(errs, err)
 	}
+	r.logger.Info("containers tore down")
 
 	err = r.network.Teardown(ctx)
 	if err != nil {
 		errs = append(errs, err)
 	}
+	r.logger.Info("network tore down")
 
 	return errors.Join(errs...)
 }
@@ -313,7 +316,5 @@ func (r *TestRuntime) collectContainerArtifacts(nodeID spec.NodeID, ctr containe
 	if err := util.CopyFile(ctr.IO.Stderr, filepath.Join(dstDir, "stderr")); err != nil {
 		return fmt.Errorf("copy stderr for %s/%s: %w", nodeID, ctr.Name, err)
 	}
-
-	r.logger.Info("container artifacts collected", "node", nodeID, "service", ctr.Name, "dst", dstDir)
 	return nil
 }
